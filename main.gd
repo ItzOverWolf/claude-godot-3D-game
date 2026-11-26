@@ -16,7 +16,7 @@ const LANE_W := 2.0
 const PATH_W := 6.0
 const TILE_LEN := 10.0
 const TURN_LEN := 6.0
-const TILES_AHEAD := 16
+const TILES_AHEAD := 11
 const TILES_BEHIND := 3
 const START_SPEED := 10.0
 const MAX_SPEED := 24.0
@@ -107,6 +107,7 @@ var leg_l: Node3D
 var leg_r: Node3D
 var scarf_tail: MeshInstance3D
 var bubble: MeshInstance3D
+var blob_shadow: MeshInstance3D
 var mats := {}
 var mesh_cache := {}
 var sfx := {}
@@ -614,6 +615,10 @@ func _spin_items() -> void:
 			var n: Node3D = it["node"]
 			n.rotation.y = time * 2.0
 			n.position.y = 1.1 + sin(time * 4.0) * 0.15
+	# keep the fake shadow on the floor and shrink it while airborne
+	blob_shadow.visible = not falling
+	blob_shadow.position.y = 0.02 - y
+	blob_shadow.scale = Vector3.ONE * clampf(1.0 - y * 0.25, 0.4, 1.0)
 	bubble.visible = state == State.PLAYING and shields > 0
 	if bubble.visible:
 		bubble.scale = Vector3.ONE * (1.0 + sin(time * 6.0) * 0.04)
@@ -783,7 +788,7 @@ func _build_tile(t: Dictionary) -> void:
 			_add(root, _box(Vector3(1.13, 0.04, 0.28)), mats["arrow"], Vector3(x, 0.03, -2.6), Vector3(0, deg_to_rad(45.0 * s), 0), false)
 		_column(root, Vector3(-s * 3.8, 0, -TURN_LEN - 0.6), 4.5, true)
 
-	var cmesh := _cyl(0.35, 0.35, 0.08, 20)
+	var cmesh := _cyl(0.35, 0.35, 0.08, 12)
 	for c in t["coins"]:
 		var n := _add(root, cmesh, mats["gold"], Vector3(c["lane"] * LANE_W, c["h"], -c["d"]), Vector3(PI / 2, 0, 0))
 		c["node"] = n
@@ -813,10 +818,6 @@ func _floor(root: Node3D, a: float, b: float, fmat: Material, trims := true) -> 
 			_add(root, _box(Vector3(0.3, 1.15, l)), mats["stone_dark"], Vector3(sx, -0.42, mid))
 	for lx in [-1.0, 1.0]:
 		_add(root, _box(Vector3(0.07, 0.02, l)), mats["groove"], Vector3(lx, 0.005, mid), Vector3.ZERO, false)
-	var j := a + 2.5
-	while j < b - 0.1:
-		_add(root, _box(Vector3(PATH_W, 0.02, 0.06)), mats["groove"], Vector3(0, 0.005, -j), Vector3.ZERO, false)
-		j += 2.5
 	var rock := _add(root, _cyl(3.0, 0.3, 5.0, 7), mats["rock"], Vector3(0, -3.4, mid), Vector3.ZERO, false)
 	rock.scale = Vector3(1.0, 1.0, maxf(0.4, l / 6.0))
 
@@ -847,23 +848,22 @@ func _build_obstacle(root: Node3D, o: Dictionary) -> void:
 
 
 func _decorate(root: Node3D) -> void:
-	if randf() < 0.55:
+	if randf() < 0.4:
 		for sx in [-3.8, 3.8]:
 			if randf() < 0.8:
 				var broken := randf() < 0.3
 				_column(root, Vector3(sx, 0, -5.0), snappedf(randf_range(1.5, 2.5) if broken else randf_range(3.0, 5.0), 0.5), not broken and randf() < 0.4, broken)
-	if randf() < 0.3:
+	if randf() < 0.2:
 		var side := -1.0 if randf() < 0.5 else 1.0
 		var p := Vector3(side * randf_range(12, 22), -randf_range(2, 8), -randf_range(0, 10))
-		_add(root, _cyl(3.0, 0.3, 4.5, 7), mats["rock"], p + Vector3(0, -2.4, 0), Vector3.ZERO, false)
-		_add(root, _cyl(3.1, 3.1, 0.4, 14), mats["grass"], p, Vector3.ZERO, false)
-		_add(root, _cyl(0.2, 0.28, 2.0, 8), mats["wood"], p + Vector3(0, 1.2, 0), Vector3.ZERO, false)
+		_add(root, _cyl(3.0, 0.3, 4.5, 6), mats["rock"], p + Vector3(0, -2.4, 0), Vector3.ZERO, false)
+		_add(root, _cyl(3.1, 3.1, 0.4, 8), mats["grass"], p, Vector3.ZERO, false)
+		_add(root, _cyl(0.2, 0.28, 2.0, 6), mats["wood"], p + Vector3(0, 1.2, 0), Vector3.ZERO, false)
 		_add(root, _sph(1.2), mats["leaf"], p + Vector3(0, 2.6, 0), Vector3.ZERO, false)
-		_add(root, _sph(0.8), mats["leaf2"], p + Vector3(0.6, 3.3, 0.2), Vector3.ZERO, false)
-	if randf() < 0.35:
+	if randf() < 0.2:
 		var side2 := -1.0 if randf() < 0.5 else 1.0
 		var cp := Vector3(side2 * randf_range(8, 28), -randf_range(9, 18), -randf_range(0, 10))
-		for b in [Vector4(0, 0, 0, 2.5), Vector4(2.2, -0.4, 0.5, 1.8), Vector4(-2.0, -0.5, -0.3, 1.9), Vector4(0.5, 0.8, 0.2, 1.6)]:
+		for b in [Vector4(0, 0, 0, 2.5), Vector4(2.2, -0.4, 0.5, 1.8)]:
 			_add(root, _sph(b.w), mats["cloud"], cp + Vector3(b.x, b.y, b.z), Vector3.ZERO, false)
 
 
@@ -897,11 +897,9 @@ func _build_environment() -> void:
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.fog_enabled = true
 	env.fog_light_color = Color(1.0, 0.84, 0.72)
-	env.fog_density = 0.0065
+	env.fog_density = 0.009
 	env.fog_sky_affect = 0.0
-	env.glow_enabled = true
-	env.glow_intensity = 0.5
-	env.glow_bloom = 0.05
+	env.glow_enabled = false
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
@@ -910,15 +908,14 @@ func _build_environment() -> void:
 	sun.rotation_degrees = Vector3(-48, -35, 0)
 	sun.light_color = Color(1.0, 0.93, 0.82)
 	sun.light_energy = 1.3
-	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 60.0
+	sun.shadow_enabled = false   # real-time shadows are the most expensive thing; we fake one under the player
 	add_child(sun)
 
 	world = Node3D.new()
 	add_child(world)
 	cam = Camera3D.new()
 	cam.fov = 70.0
-	cam.far = 300.0
+	cam.far = 130.0
 	add_child(cam)
 	cam.make_current()
 	cam.position = Vector3(4, 3, 4)
@@ -973,6 +970,12 @@ func _build_player() -> void:
 		_add(arm, _sph(0.11), skin, Vector3(0, -0.64, 0))
 
 	bubble = _add(player, _sph(1.25), mats["bubble"], Vector3(0, 1.0, 0), Vector3.ZERO, false)
+
+	# cheap fake shadow: a flat dark disc that stays on the floor under the runner
+	var sm := _mat(Color(0, 0, 0, 0.3), 1.0)
+	sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	blob_shadow = _add(player, _cyl(0.5, 0.5, 0.01, 12), sm, Vector3(0, 0.02, 0), Vector3.ZERO, false)
 
 
 func _make_materials() -> void:
@@ -1066,8 +1069,8 @@ func _sph(r: float) -> SphereMesh:
 		var m := SphereMesh.new()
 		m.radius = r
 		m.height = r * 2.0
-		m.radial_segments = 20
-		m.rings = 10
+		m.radial_segments = 12
+		m.rings = 6
 		mesh_cache[key] = m
 	return mesh_cache[key]
 
@@ -1078,6 +1081,8 @@ func _cap(r: float, h: float) -> CapsuleMesh:
 		var m := CapsuleMesh.new()
 		m.radius = r
 		m.height = h
+		m.radial_segments = 10
+		m.rings = 2
 		mesh_cache[key] = m
 	return mesh_cache[key]
 
